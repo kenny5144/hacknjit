@@ -1,16 +1,17 @@
-// app/api/gemini/route.js  (Make sure this is the correct path)
-
 import { NextResponse } from "next/server";
-import {
-  GoogleAIFileManager,
-  FileState,
-  GoogleGenerativeAI,
-} from "@google/generative-ai/server";
+import OpenAI from "openai";
+
+const openai = new OpenAI({
+  apiKey: process.env.API_KEY, // Use your OpenAI API key
+});
 
 export async function POST(request) {
   try {
     const formData = await request.formData();
     const audioFile = formData.get("audio");
+
+    // Log the form data entries for debugging
+    console.log("Received form data:", ...formData.entries());
 
     if (!audioFile || !audioFile.name) {
       return NextResponse.json(
@@ -19,47 +20,45 @@ export async function POST(request) {
       );
     }
 
-    const fileManager = new GoogleAIFileManager(process.env.API_KEY);
-    const uploadResult = await fileManager.uploadFile(
-      await audioFile.arrayBuffer(),
-      {
-        mimeType: audioFile.type,
-        displayName: audioFile.name,
-      }
-    );
+    // Get a readable stream from the audio file
+    const audioStream = audioFile.stream();
 
-    let file = await fileManager.getFile(uploadResult.file.name);
-    while (file.state === FileState.PROCESSING) {
-      await new Promise((resolve) => setTimeout(resolve, 10000));
-      file = await fileManager.getFile(uploadResult.file.name);
-    }
+    // Transcribe audio using OpenAI's Whisper API
+    const transcriptionResponse = await openai.audio.transcriptions.create({
+      file: audioStream,
+      model: "whisper-1",
+      response_format: "verbose_json", // or "text"
+      language: "en", // Specify English language
+      temperature: 0.2, // Adjust temperature as needed
+      timestamp_granularities: ["word"],
+    });
 
-    if (file.state === FileState.FAILED) {
-      throw new Error("Audio processing failed.");
-    }
+    const transcript = transcriptionResponse.text;
+    console.log("Transcription:", transcript);
 
-    const genAI = new GoogleGenerativeAI(process.env.API_KEY);
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-    const result = await model.generateContent([
-      {
-        fileData: {
-          fileUri: uploadResult.file.uri,
-          mimeType: uploadResult.file.mimeType,
+    const completionResponse = await openai.chat.completions.create({
+      model: "gpt-4",
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are a supportive therapist. Provide calming and constructive feedback based on the transcript of an audio file.",
         },
-      },
-      { text: "As a therapist, help me feel accomplished and calm." },
-    ]);
+        { role: "user", content: transcript },
+      ],
+    });
 
-    const aiResponse = result.response.text();
+    const aiResponse = completionResponse.choices[0].message.content;
+    console.log("AI Response:", aiResponse);
 
     return NextResponse.json({
-      message: "Audio file uploaded and processed successfully!",
+      message: "Audio file processed and response generated successfully!",
       aiResponse,
     });
   } catch (error) {
     console.error("Error handling audio upload:", error);
     return NextResponse.json(
-      { error: "Internal Server Error" },
+      { error: "Internal Server Error", details: error.message },
       { status: 500 }
     );
   }

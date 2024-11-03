@@ -64,7 +64,7 @@ const SpeechRecognitionComponent = ({ onTranscriptComplete }) => {
         setTimeout(() => {
           stopRecording();
           handleUploadAudio(); // Upload when silence is detected
-        }, 1000)
+        }, 2000)
       );
     };
 
@@ -88,7 +88,7 @@ const SpeechRecognitionComponent = ({ onTranscriptComplete }) => {
         videoStreamRef.current.getTracks().forEach((track) => track.stop());
       }
     };
-  }, [listening]); // Re-run effect when listening state changes
+  }, [listening]); 
 
   const startRecording = () => {
     audioChunks.current = [];
