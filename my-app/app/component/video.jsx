@@ -1,24 +1,54 @@
 "use client";
-import React from "react";
-import { useRef, useEffect } from "react";
-const Video = () => {
+import React, { useEffect, useRef, useState } from "react";
+
+const Video = ({ onStreamReady }) => {
   const videoRef = useRef(null);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
-    async function startVideo() {
+    const startVideoStream = async () => {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
           video: true,
+          audio: true,
         });
-        videoRef.current.srcObject = stream;
-      } catch (error) {
-        console.error("Error accessing the camera", error);
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          if (onStreamReady) {
+            onStreamReady(stream);
+          }
+        }
+      } catch (err) {
+        console.error("Error accessing media devices:", err);
+        setError(
+          "Unable to access media devices. Please check your permissions."
+        );
       }
-    }
-    startVideo();
-  }, []);
+    };
 
-  return <video ref={videoRef} autoPlay playsInline />;
+    startVideoStream();
+
+    return () => {
+      if (videoRef.current && videoRef.current.srcObject) {
+        videoRef.current.srcObject.getTracks().forEach((track) => track.stop());
+      }
+    };
+  }, [onStreamReady]);
+
+  return (
+    <div>
+      {error ? (
+        <p>{error}</p>
+      ) : (
+        <video
+          ref={videoRef}
+          autoPlay
+          playsInline
+          style={{ width: "100%", height: "auto" }}
+        />
+      )}
+    </div>
+  );
 };
 
 export default Video;
